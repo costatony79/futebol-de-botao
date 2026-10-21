@@ -36,6 +36,9 @@
   }
   .time { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; min-width: 0; }
   .time .nome { overflow-wrap: anywhere; }
+  .editar-nome { all: unset; cursor: pointer; font: inherit; font-weight: 700; color: inherit; border-bottom: 1px dashed rgba(255,255,255,.35); }
+  .editar-nome:hover { border-bottom-color: var(--amarelo); }
+  .editar-nome:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
   .time.direita { justify-content: flex-end; text-align: right; }
   .escudo { width: 26px; height: 26px; border-radius: 50%; border: 3px solid rgba(255,255,255,.85); flex: none; }
   .escudo { background-size: cover; background-position: center; }
@@ -121,12 +124,12 @@
 <body>
 <div class="pagina">
   <header class="placar" aria-live="polite">
-    <div class="time"><span class="escudo" id="escudo-azul" aria-hidden="true"></span><span class="nome" id="nome-azul">Time Azul</span></div>
+    <div class="time"><span class="escudo" id="escudo-azul" aria-hidden="true"></span><button type="button" class="nome editar-nome" id="nome-azul" data-time="azul" title="Clique para mudar o nome e a camisa">Time Azul</button></div>
     <div class="centro">
       <div class="gols"><span id="gols-azul">0</span> × <span id="gols-vermelho">0</span></div>
       <div class="relogio" id="relogio">1º tempo · 00:00</div>
     </div>
-    <div class="time direita"><span class="nome" id="nome-vermelho">Time Vermelho</span><span class="escudo" id="escudo-vermelho" aria-hidden="true"></span></div>
+    <div class="time direita"><button type="button" class="nome editar-nome" id="nome-vermelho" data-time="vermelho" title="Clique para mudar o nome e a camisa">Time Vermelho</button><span class="escudo" id="escudo-vermelho" aria-hidden="true"></span></div>
   </header>
 
   <div class="estadio">
@@ -155,7 +158,7 @@
         <legend>Time da esquerda</legend>
         <div class="previa-linha"><canvas class="previa" width="120" height="120" aria-hidden="true"></canvas>
           <div class="campos">
-            <label>Nome <input type="text" class="cfg-nome" maxlength="24"></label>
+            <label>Nome do time <input type="text" class="cfg-nome" maxlength="24" placeholder="Digite o nome do time"></label>
             <div class="cores">
               <label>Cor 1 <input type="color" class="cfg-cor1"></label>
               <label>Cor 2 <input type="color" class="cfg-cor2"></label>
@@ -181,7 +184,7 @@
         <legend>Time da direita</legend>
         <div class="previa-linha"><canvas class="previa" width="120" height="120" aria-hidden="true"></canvas>
           <div class="campos">
-            <label>Nome <input type="text" class="cfg-nome" maxlength="24"></label>
+            <label>Nome do time <input type="text" class="cfg-nome" maxlength="24" placeholder="Digite o nome do time"></label>
             <div class="cores">
               <label>Cor 1 <input type="color" class="cfg-cor1"></label>
               <label>Cor 2 <input type="color" class="cfg-cor2"></label>
@@ -231,10 +234,12 @@
 
   // Aparência de cada time (a "skin"): nome, cores, estilo da camisa e escudo opcional.
   const PADRAO = {
-    azul: { nome: "Time Azul", cor1: "#2f7de1", cor2: "#ffffff", estilo: "lisa", escudo: null },
-    vermelho: { nome: "Time Vermelho", cor1: "#e0473c", cor2: "#ffffff", estilo: "lisa", escudo: null },
+    azul: { nome: "Time Azul", nomePadrao: "Time Azul", cor1: "#2f7de1", cor2: "#ffffff", estilo: "lisa", escudo: null },
+    vermelho: { nome: "Time Vermelho", nomePadrao: "Time Vermelho", cor1: "#e0473c", cor2: "#ffffff", estilo: "lisa", escudo: null },
   };
   const times = JSON.parse(JSON.stringify(PADRAO));
+  // Nome que aparece no jogo: o digitado ou, se estiver vazio, o nome genérico do lado (Azul ou Vermelho).
+  function nomeDo(t) { return (times[t].nome || "").trim() || times[t].nomePadrao || PADRAO[t].nome; }
   const imagensEscudo = { azul: null, vermelho: null };
   try {
     const salvo = JSON.parse(localStorage.getItem("futebol-de-botao-times") || "null");
@@ -363,7 +368,7 @@
   function marcarGol(time) {
     placar[time]++;
     document.getElementById("gols-" + time).textContent = placar[time];
-    mostrarAviso("GOL!", times[time].nome);
+    mostrarAviso("GOL!", escapar(nomeDo(time)));
     // Quem sofreu o gol dá a saída.
     novaBola(time === "azul" ? -1 : 1);
     esperando = 1.6;
@@ -559,7 +564,7 @@
     fimDeJogo = true;
     tempoJogo = PARTIDA;
     mostrarRelogio();
-    const a = { nome: times.azul.nome, gols: placar.azul }, v = { nome: times.vermelho.nome, gols: placar.vermelho };
+    const a = { nome: nomeDo("azul"), gols: placar.azul }, v = { nome: nomeDo("vermelho"), gols: placar.vermelho };
     const resultado = a.gols === v.gols
       ? `Empate: ${escapar(a.nome)} ${a.gols} × ${v.gols} ${escapar(v.nome)}`
       : `Vitória do ${escapar(a.gols > v.gols ? a.nome : v.nome)}: ${a.gols} × ${v.gols}`;
@@ -611,7 +616,8 @@
   canvas.addEventListener("click", alternarPausa);
 
   document.addEventListener("keydown", (e) => {
-    if (e.target.tagName === "INPUT" && e.key !== " ") return;
+    // Enquanto se digita num campo (nome do time etc.), as teclas são do campo, não atalhos.
+    if (e.target.matches('input:not([type="range"]), textarea, select')) return;
     if (e.key === "+" || e.key === "=") definirVelocidade(velocidade + 0.25);
     else if (e.key === "-" || e.key === "_") definirVelocidade(velocidade - 0.25);
     else if (e.key === " ") { e.preventDefault(); alternarPausa(); }
@@ -638,7 +644,7 @@
   }
   function atualizarTela() {
     ["azul", "vermelho"].forEach((t) => {
-      document.getElementById("nome-" + t).textContent = times[t].nome || "Sem nome";
+      document.getElementById("nome-" + t).textContent = nomeDo(t);
       const esc = document.getElementById("escudo-" + t);
       esc.style.backgroundImage = times[t].escudo
         ? `url("${times[t].escudo}")`
@@ -709,6 +715,13 @@
     carregarEscudo("azul"); carregarEscudo("vermelho"); preencherPainel(); salvarTimes(); atualizarTela();
   });
   carregarEscudo("azul"); carregarEscudo("vermelho"); preencherPainel(); atualizarTela();
+  document.querySelectorAll(".editar-nome").forEach((botao) => botao.addEventListener("click", () => {
+    const painel = document.getElementById("personalizar");
+    painel.open = true;
+    const campo = document.querySelector(`.time-config[data-time="${botao.dataset.time}"] .cfg-nome`);
+    campo.scrollIntoView({ behavior: "smooth", block: "center" });
+    campo.focus(); campo.select();
+  }));
 
   definirVelocidade(1);
   mostrarRelogio();
