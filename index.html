@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Futebol de Botão</title>
+<style>
+  /* Layout: placar no topo, campo no centro ocupando a largura, controles embaixo. */
+  :root {
+    --fundo: #10261a;
+    --painel: #183a27;
+    --texto: #eef6f0;
+    --suave: #a9c7b3;
+    --azul: #2f7de1;
+    --vermelho: #e0473c;
+    --amarelo: #ffd23f;
+    --raio: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(circle at 50% 0%, #1d4a31, var(--fundo) 60%);
+    color: var(--texto);
+    font: 16px/1.4 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .pagina { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+
+  /* Placar */
+  .placar {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px;
+    background: var(--painel); border-radius: var(--raio); padding: 10px 16px;
+    box-shadow: 0 4px 18px rgba(0,0,0,.35);
+  }
+  .time { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; min-width: 0; }
+  .time .nome { overflow-wrap: anywhere; }
+  .time.direita { justify-content: flex-end; text-align: right; }
+  .escudo { width: 26px; height: 26px; border-radius: 50%; border: 3px solid rgba(255,255,255,.85); flex: none; }
+  .escudo { background-size: cover; background-position: center; }
+  .centro { text-align: center; }
+  .gols { font-size: 2.4rem; font-weight: 800; letter-spacing: .04em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .relogio { color: var(--suave); font-size: .9rem; font-variant-numeric: tabular-nums; }
+
+  /* Campo */
+  .estadio { position: relative; border-radius: var(--raio); overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+  canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+  .aviso-gol {
+    position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+    font-size: clamp(3rem, 12vw, 7rem); font-weight: 900; letter-spacing: .06em;
+    color: var(--amarelo); text-shadow: 0 4px 0 rgba(0,0,0,.35), 0 0 30px rgba(0,0,0,.5);
+    opacity: 0; transform: scale(.6);
+  }
+  .aviso-gol.mostrar { animation: gol 1.6s ease-out forwards; }
+  .aviso-gol small { display: block; font-size: .3em; letter-spacing: .02em; color: #fff; text-align: center; font-weight: 700; }
+  .aviso-gol.fixo { opacity: 1; transform: none; background: rgba(0,0,0,.55); pointer-events: auto; }
+  @keyframes gol {
+    0% { opacity: 0; transform: scale(.6) rotate(-6deg); }
+    20% { opacity: 1; transform: scale(1.15) rotate(3deg); }
+    35% { transform: scale(1) rotate(0); }
+    80% { opacity: 1; }
+    100% { opacity: 0; transform: scale(1.05); }
+  }
+
+  /* Controles */
+  .controles {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    background: var(--painel); border-radius: var(--raio); padding: 12px 16px;
+  }
+  .grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+  .velocidade { flex: 1 1 260px; }
+  .velocidade input { flex: 1; accent-color: var(--amarelo); min-width: 0; }
+  .velocidade output { min-width: 3.2em; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  button {
+    font: inherit; font-weight: 700; color: #10261a; background: var(--amarelo);
+    border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  }
+  button.secundario { background: rgba(255,255,255,.12); color: var(--texto); }
+  button:focus-visible, input:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .dica { color: var(--suave); font-size: .85rem; margin: 0; text-align: center; }
+  kbd { background: rgba(255,255,255,.12); border-radius: 4px; padding: 0 5px; font-family: inherit; }
+
+  /* Personalizar times */
+  .personalizar { background: var(--painel); border-radius: var(--raio); padding: 10px 16px; }
+  .personalizar summary { cursor: pointer; font-weight: 700; padding: 4px 0; }
+  .times-config { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; margin-top: 10px; }
+  .time-config { border: 1px solid rgba(255,255,255,.15); border-radius: 10px; padding: 12px; margin: 0; display: grid; gap: 10px; min-width: 0; }
+  .time-config legend { padding: 0 6px; color: var(--suave); font-size: .85rem; }
+  .time-config label { display: grid; gap: 4px; font-size: .9rem; color: var(--suave); }
+  .previa-linha { display: flex; gap: 12px; align-items: center; }
+  .previa { width: 72px; height: 72px; flex: none; }
+  .campos { display: grid; gap: 8px; flex: 1; min-width: 0; }
+  .cores { display: flex; gap: 12px; }
+  .cores label { grid-template-columns: auto 44px; align-items: center; gap: 6px; }
+  .time-config input[type="text"], .time-config select {
+    font: inherit; color: var(--texto); background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0;
+  }
+  .time-config input[type="color"] { width: 44px; height: 32px; padding: 0; border: 0; background: none; cursor: pointer; }
+  .time-config input[type="file"] { font-size: .85rem; color: var(--texto); max-width: 100%; }
+  .acoes-config { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  @media (max-width: 560px) {
+    .gols { font-size: 1.9rem; }
+    .time span.nome { font-size: .85rem; }
+    .time { gap: 6px; }
+    .escudo { width: 20px; height: 20px; }
+    body { padding: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aviso-gol.mostrar { animation-duration: .01s; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="pagina">
+  <header class="placar" aria-live="polite">
+    <div class="time"><span class="escudo" id="escudo-azul" aria-hidden="true"></span><span class="nome" id="nome-azul">Time Azul</span></div>
+    <div class="centro">
+      <div class="gols"><span id="gols-azul">0</span> × <span id="gols-vermelho">0</span></div>
+      <div class="relogio" id="relogio">1º tempo · 00:00</div>
+    </div>
+    <div class="time direita"><span class="nome" id="nome-vermelho">Time Vermelho</span><span class="escudo" id="escudo-vermelho" aria-hidden="true"></span></div>
+  </header>
+
+  <div class="estadio">
+    <canvas id="campo" width="1050" height="680" aria-label="Campo de futebol com a bola quicando entre os botões dos dois times"></canvas>
+    <div class="aviso-gol" id="aviso-gol">GOL!</div>
+  </div>
+
+  <div class="controles">
+    <div class="grupo velocidade">
+      <label for="velocidade">Velocidade</label>
+      <button type="button" class="secundario" id="mais-lento" aria-label="Diminuir velocidade">−</button>
+      <input type="range" id="velocidade" min="0.25" max="4" step="0.25" value="1">
+      <button type="button" class="secundario" id="mais-rapido" aria-label="Aumentar velocidade">+</button>
+      <output id="velocidade-valor" for="velocidade">1×</output>
+    </div>
+    <div class="grupo">
+      <button type="button" id="pausar">Iniciar partida</button>
+      <button type="button" class="secundario" id="nova-bola">Nova bola</button>
+      <button type="button" class="secundario" id="zerar">Nova partida</button>
+    </div>
+  </div>
+  <details class="personalizar" id="personalizar">
+    <summary>Personalizar times</summary>
+    <div class="times-config">
+      <fieldset class="time-config" data-time="azul">
+        <legend>Time da esquerda</legend>
+        <div class="previa-linha"><canvas class="previa" width="120" height="120" aria-hidden="true"></canvas>
+          <div class="campos">
+            <label>Nome <input type="text" class="cfg-nome" maxlength="24"></label>
+            <div class="cores">
+              <label>Cor 1 <input type="color" class="cfg-cor1"></label>
+              <label>Cor 2 <input type="color" class="cfg-cor2"></label>
+            </div>
+          </div>
+        </div>
+        <label>Camisa
+          <select class="cfg-estilo">
+            <option value="lisa">Lisa</option>
+            <option value="vertical">Listras verticais</option>
+            <option value="horizontal">Listras horizontais</option>
+            <option value="diagonal">Faixa diagonal</option>
+            <option value="metade">Metade e metade</option>
+            <option value="aro">Com aro</option>
+          </select>
+        </label>
+        <label>Escudo (imagem opcional)
+          <input type="file" class="cfg-escudo" accept="image/*">
+        </label>
+        <button type="button" class="secundario cfg-tirar-escudo" hidden>Tirar escudo</button>
+      </fieldset>
+      <fieldset class="time-config" data-time="vermelho">
+        <legend>Time da direita</legend>
+        <div class="previa-linha"><canvas class="previa" width="120" height="120" aria-hidden="true"></canvas>
+          <div class="campos">
+            <label>Nome <input type="text" class="cfg-nome" maxlength="24"></label>
+            <div class="cores">
+              <label>Cor 1 <input type="color" class="cfg-cor1"></label>
+              <label>Cor 2 <input type="color" class="cfg-cor2"></label>
+            </div>
+          </div>
+        </div>
+        <label>Camisa
+          <select class="cfg-estilo">
+            <option value="lisa">Lisa</option>
+            <option value="vertical">Listras verticais</option>
+            <option value="horizontal">Listras horizontais</option>
+            <option value="diagonal">Faixa diagonal</option>
+            <option value="metade">Metade e metade</option>
+            <option value="aro">Com aro</option>
+          </select>
+        </label>
+        <label>Escudo (imagem opcional)
+          <input type="file" class="cfg-escudo" accept="image/*">
+        </label>
+        <button type="button" class="secundario cfg-tirar-escudo" hidden>Tirar escudo</button>
+      </fieldset>
+    </div>
+    <div class="acoes-config">
+      <button type="button" class="secundario" id="trocar-lados">Trocar os lados</button>
+      <button type="button" class="secundario" id="restaurar-times">Voltar ao padrão</button>
+    </div>
+    <p class="dica">As escolhas ficam salvas neste navegador. A imagem cobre o botão inteiro; use uma imagem quadrada para ficar melhor.</p>
+  </details>
+  <p class="dica">Partida de 1 minuto (vale 90 minutos de jogo), com troca de lado no intervalo. Atalhos: <kbd>+</kbd> e <kbd>−</kbd> mudam a velocidade, <kbd>Espaço</kbd> inicia e pausa.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const canvas = document.getElementById("campo");
+  const ctx = canvas.getContext("2d");
+
+  // Medidas do campo em "metros de desenho" (o canvas tem 1050 × 680, proporção de um campo oficial de 105 × 68 m).
+  const L = 1050, A = 680, M = 30;               // largura, altura, margem (faixa fora do campo)
+  const X0 = M, X1 = L - M, Y0 = M, Y1 = A - M;   // linhas do campo
+  const GOL_ALT = 150, GOL_PROF = 22;             // abertura e profundidade do gol
+  const GOL_Y0 = A / 2 - GOL_ALT / 2, GOL_Y1 = A / 2 + GOL_ALT / 2;
+  const R_BOLA = 15, R_BOTAO = 29;
+  const PARTIDA = 60, INTERVALO = 30;            // segundos reais: 60 s de jogo, troca de lado aos 30 s
+  const VEL_BASE = 330;                            // pixels por segundo com velocidade 1×
+  const VEL_MAX = 1.9;                             // a bola pode acelerar até 1,9× a base com os chutes
+
+  // Aparência de cada time (a "skin"): nome, cores, estilo da camisa e escudo opcional.
+  const PADRAO = {
+    azul: { nome: "Time Azul", cor1: "#2f7de1", cor2: "#ffffff", estilo: "lisa", escudo: null },
+    vermelho: { nome: "Time Vermelho", cor1: "#e0473c", cor2: "#ffffff", estilo: "lisa", escudo: null },
+  };
+  const times = JSON.parse(JSON.stringify(PADRAO));
+  const imagensEscudo = { azul: null, vermelho: null };
+  try {
+    const salvo = JSON.parse(localStorage.getItem("futebol-de-botao-times") || "null");
+    if (salvo) ["azul", "vermelho"].forEach((t) => Object.assign(times[t], salvo[t] || {}));
+  } catch (e) { /* sem armazenamento: usa o padrão */ }
+
+  // Formação 1-2-1-1 de cada time (futebol de botão tem 5 botões + goleiro).
+  // Coordenadas para o time que ataca para a direita; o outro é espelhado.
+  const FORMACAO = [
+    { x: 0.045, y: 0.50, goleiro: true },
+    { x: 0.20, y: 0.28 }, { x: 0.20, y: 0.72 },
+    { x: 0.33, y: 0.50 },
+    { x: 0.42, y: 0.18 }, { x: 0.42, y: 0.82 },
+  ];
+  const botoes = [];
+  [["azul", 1], ["vermelho", -1]].forEach(([time, lado]) => {
+    FORMACAO.forEach((p, i) => {
+      const fx = lado === 1 ? p.x : 1 - p.x;
+      botoes.push({
+        time, lado, goleiro: !!p.goleiro, numero: i + 1,
+        x: X0 + fx * (X1 - X0), y: Y0 + p.y * (Y1 - Y0),
+        baseY: Y0 + p.y * (Y1 - Y0), fase: Math.random() * Math.PI * 2, ritmo: 0.7 + Math.random() * 0.9, brilho: 0,
+      });
+    });
+  });
+
+  // ---------- Estado ----------
+  const bola = { x: L / 2, y: A / 2, vx: 0, vy: 0, rastro: [] };
+  let velocidade = 1, pausado = false, esperando = 0, tempoJogo = 0;
+  let segundoTempo = false, fimDeJogo = false, ladosTrocados = false;
+  let aguardandoInicio = true; // a partida só começa quando o professor clica em "Iniciar partida"
+  const placar = { azul: 0, vermelho: 0 };
+
+  function aleatorio(min, max) { return min + Math.random() * (max - min); }
+
+  function novaBola(direcao) {
+    bola.x = L / 2; bola.y = A / 2; bola.rastro.length = 0;
+    const lado = direcao || (Math.random() < 0.5 ? 1 : -1);
+    const ang = aleatorio(-0.9, 0.9);
+    bola.vx = Math.cos(ang) * VEL_BASE * lado;
+    bola.vy = Math.sin(ang) * VEL_BASE;
+    esperando = 0.8; // pausa curta antes de a bola sair do meio-campo
+  }
+
+  // ---------- Física ----------
+  function rapidez() { return Math.hypot(bola.vx, bola.vy); }
+
+  function ajustarRapidez(r) {
+    const atual = rapidez() || 1;
+    const alvo = Math.min(Math.max(r, VEL_BASE * 0.8), VEL_BASE * VEL_MAX);
+    bola.vx *= alvo / atual; bola.vy *= alvo / atual;
+  }
+
+  // Evita a bola ficar quicando quase na vertical para sempre.
+  function garantirAvanço() {
+    const r = rapidez();
+    if (Math.abs(bola.vx) < r * 0.25) {
+      bola.vx = Math.sign(bola.vx || (Math.random() < .5 ? 1 : -1)) * r * 0.25;
+      bola.vy = Math.sign(bola.vy || 1) * Math.sqrt(r * r - bola.vx * bola.vx);
+    }
+  }
+
+  function passo(dt) {
+    bola.x += bola.vx * dt;
+    bola.y += bola.vy * dt;
+
+    // Laterais (em cima e embaixo).
+    if (bola.y < Y0 + R_BOLA) { bola.y = Y0 + R_BOLA; bola.vy = Math.abs(bola.vy); }
+    if (bola.y > Y1 - R_BOLA) { bola.y = Y1 - R_BOLA; bola.vy = -Math.abs(bola.vy); }
+
+    // Linhas de fundo: quica, a não ser que a bola esteja na boca do gol.
+    const naBoca = bola.y > GOL_Y0 + R_BOLA * 0.5 && bola.y < GOL_Y1 - R_BOLA * 0.5;
+    if (bola.x < X0 + R_BOLA) {
+      if (naBoca) { if (bola.x < X0 - R_BOLA) return marcarGol("vermelho"); }
+      else { bola.x = X0 + R_BOLA; bola.vx = Math.abs(bola.vx); }
+    }
+    if (bola.x > X1 - R_BOLA) {
+      if (naBoca) { if (bola.x > X1 + R_BOLA) return marcarGol("azul"); }
+      else { bola.x = X1 - R_BOLA; bola.vx = -Math.abs(bola.vx); }
+    }
+    // Dentro do gol, as traves e a rede seguram a bola nas laterais.
+    if (bola.x < X0 || bola.x > X1) {
+      if (bola.y < GOL_Y0 + R_BOLA) { bola.y = GOL_Y0 + R_BOLA; bola.vy = Math.abs(bola.vy); }
+      if (bola.y > GOL_Y1 - R_BOLA) { bola.y = GOL_Y1 - R_BOLA; bola.vy = -Math.abs(bola.vy); }
+    }
+
+    // Botões: a bola bate, quica e o botão chuta para o lado do gol adversário.
+    for (const b of botoes) {
+      const dx = bola.x - b.x, dy = bola.y - b.y;
+      const dist = Math.hypot(dx, dy), minimo = R_BOLA + R_BOTAO;
+      if (dist >= minimo || dist === 0) continue;
+      const nx = dx / dist, ny = dy / dist;
+      bola.x = b.x + nx * (minimo + 0.5);
+      bola.y = b.y + ny * (minimo + 0.5);
+
+      const golAlvoX = b.lado === 1 ? X1 + GOL_PROF : X0 - GOL_PROF;
+      const golAlvoY = A / 2 + aleatorio(-GOL_ALT * 0.9, GOL_ALT * 0.9);
+      const chute = Math.random() < (b.goleiro ? 0.85 : 0.65); // nem todo toque é um chute certeiro
+      let ang;
+      if (chute) {
+        ang = Math.atan2(golAlvoY - b.y, golAlvoX - b.x) + aleatorio(-0.55, 0.55);
+      } else {
+        // Rebote: reflete na superfície do botão com um desvio aleatório.
+        const dot = bola.vx * nx + bola.vy * ny;
+        ang = Math.atan2(bola.vy - 2 * dot * ny, bola.vx - 2 * dot * nx) + aleatorio(-0.4, 0.4);
+      }
+      const r = rapidez() * (chute ? aleatorio(1.02, 1.12) : aleatorio(0.92, 1.0));
+      bola.vx = Math.cos(ang) * r; bola.vy = Math.sin(ang) * r;
+      // Garante que a bola saia do botão, e não para dentro dele.
+      if (bola.vx * nx + bola.vy * ny < 0) { bola.vx = -bola.vx; bola.vy = -bola.vy; }
+      ajustarRapidez(rapidez());
+      b.brilho = 1;
+      break;
+    }
+    garantirAvanço();
+  }
+
+  const escapar = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  function mostrarAviso(titulo, subtitulo, fixo) {
+    const aviso = document.getElementById("aviso-gol");
+    aviso.innerHTML = `<div><div>${escapar(titulo)}</div>${subtitulo ? `<small>${subtitulo}</small>` : ""}</div>`;
+    aviso.classList.remove("mostrar", "fixo"); void aviso.offsetWidth;
+    aviso.classList.add(fixo ? "fixo" : "mostrar");
+  }
+
+  function marcarGol(time) {
+    placar[time]++;
+    document.getElementById("gols-" + time).textContent = placar[time];
+    mostrarAviso("GOL!", times[time].nome);
+    // Quem sofreu o gol dá a saída.
+    novaBola(time === "azul" ? -1 : 1);
+    esperando = 1.6;
+  }
+
+  // Goleiros acompanham a bola devagar; os outros botões "respiram" um pouquinho.
+  function moverBotoes(dt, t) {
+    for (const b of botoes) {
+      if (b.goleiro) {
+        const alvo = Math.min(Math.max(bola.y, GOL_Y0 + 10), GOL_Y1 - 10);
+        b.y += (alvo - b.y) * Math.min(1, dt * 1.6);
+      } else {
+        // Cada botão sobe e desce no seu próprio ritmo, sem sair do campo.
+        const alvo = b.baseY + Math.sin(t * b.ritmo + b.fase) * 60;
+        b.y = Math.min(Math.max(alvo, Y0 + R_BOTAO + 4), Y1 - R_BOTAO - 4);
+      }
+      b.brilho = Math.max(0, b.brilho - dt * 3);
+    }
+  }
+
+  // ---------- Desenho ----------
+  function desenharCampo() {
+    // Grama em faixas.
+    const faixas = 12, larg = L / faixas;
+    for (let i = 0; i < faixas; i++) {
+      ctx.fillStyle = i % 2 ? "#2e8b4a" : "#33994f";
+      ctx.fillRect(i * larg, 0, larg + 1, A);
+    }
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(X0, Y0, X1 - X0, Y1 - Y0);
+    ctx.beginPath(); ctx.moveTo(L / 2, Y0); ctx.lineTo(L / 2, Y1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(L / 2, A / 2, 91.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(L / 2, A / 2, 4, 0, Math.PI * 2); ctx.fill();
+    // Grandes e pequenas áreas, marca do pênalti e meia-lua (medidas oficiais em escala 10:1).
+    [[X0, 1], [X1, -1]].forEach(([x, s]) => {
+      ctx.strokeRect(s === 1 ? x : x - 165, A / 2 - 201.5, 165, 403);
+      ctx.strokeRect(s === 1 ? x : x - 55, A / 2 - 91.5, 55, 183);
+      ctx.beginPath(); ctx.arc(x + s * 110, A / 2, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath();
+      const ang = Math.acos(55 / 91.5);
+      if (s === 1) ctx.arc(x + 110, A / 2, 91.5, -ang, ang);
+      else ctx.arc(x - 110, A / 2, 91.5, Math.PI - ang, Math.PI + ang);
+      ctx.stroke();
+    });
+    // Gols com rede.
+    [[X0, -1], [X1, 1]].forEach(([x, s]) => {
+      const gx = s === 1 ? x : x - GOL_PROF;
+      ctx.fillStyle = "rgba(255,255,255,.12)";
+      ctx.fillRect(gx, GOL_Y0, GOL_PROF, GOL_ALT);
+      ctx.strokeStyle = "rgba(255,255,255,.35)"; ctx.lineWidth = 1;
+      for (let y = GOL_Y0; y <= GOL_Y1; y += 10) { ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + GOL_PROF, y); ctx.stroke(); }
+      for (let xx = gx; xx <= gx + GOL_PROF; xx += 7) { ctx.beginPath(); ctx.moveTo(xx, GOL_Y0); ctx.lineTo(xx, GOL_Y1); ctx.stroke(); }
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(x, GOL_Y0); ctx.lineTo(x + s * GOL_PROF, GOL_Y0); ctx.lineTo(x + s * GOL_PROF, GOL_Y1); ctx.lineTo(x, GOL_Y1); ctx.stroke();
+    });
+  }
+
+  // Pinta a camisa do time dentro de um círculo (usado no campo e na prévia).
+  function pintarCamisa(c, x, y, r, t) {
+    const cfg = times[t];
+    c.save();
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.clip();
+    c.fillStyle = cfg.cor1; c.fillRect(x - r, y - r, 2 * r, 2 * r);
+    c.fillStyle = cfg.cor2;
+    const faixa = r / 2.6;
+    if (cfg.estilo === "vertical") {
+      for (let i = -3; i <= 3; i += 2) c.fillRect(x + i * faixa - faixa / 2, y - r, faixa, 2 * r);
+    } else if (cfg.estilo === "horizontal") {
+      for (let i = -3; i <= 3; i += 2) c.fillRect(x - r, y + i * faixa - faixa / 2, 2 * r, faixa);
+    } else if (cfg.estilo === "diagonal") {
+      c.translate(x, y); c.rotate(-Math.PI / 4); c.fillRect(-r, -r * 0.28, 2 * r, r * 0.56);
+    } else if (cfg.estilo === "metade") {
+      c.fillRect(x, y - r, r, 2 * r);
+    } else if (cfg.estilo === "aro") {
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.arc(x, y, r * 0.7, 0, Math.PI * 2, true); c.fill();
+    }
+    c.restore();
+    // Escudo no centro.
+    const img = imagensEscudo[t];
+    if (img && img.complete && img.naturalWidth) {
+      const ri = r; // a imagem cobre o botão inteiro
+      c.save();
+      c.beginPath(); c.arc(x, y, ri, 0, Math.PI * 2); c.closePath();
+      c.fillStyle = "#fff"; c.fill(); c.clip();
+      const esc = Math.max((2 * ri) / img.naturalWidth, (2 * ri) / img.naturalHeight);
+      const w = img.naturalWidth * esc, h = img.naturalHeight * esc;
+      c.drawImage(img, x - w / 2, y - h / 2, w, h);
+      c.restore();
+    }
+    // Brilho de botão de mesa.
+    const g = c.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+    g.addColorStop(0, "rgba(255,255,255,.45)"); g.addColorStop(0.45, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(0,0,0,.18)");
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+  }
+
+  function desenharBotao(b) {
+    // Sombra.
+    ctx.fillStyle = "rgba(0,0,0,.28)";
+    ctx.beginPath(); ctx.ellipse(b.x + 3, b.y + 5, R_BOTAO, R_BOTAO * 0.9, 0, 0, Math.PI * 2); ctx.fill();
+    // Brilho do toque.
+    if (b.brilho > 0) {
+      ctx.fillStyle = `rgba(255,210,63,${0.55 * b.brilho})`;
+      ctx.beginPath(); ctx.arc(b.x, b.y, R_BOTAO + 10 * b.brilho, 0, Math.PI * 2); ctx.fill();
+    }
+    // Botão com a camisa do time.
+    pintarCamisa(ctx, b.x, b.y, R_BOTAO, b.time);
+    ctx.lineWidth = 3.5; ctx.strokeStyle = b.goleiro ? "#ffd23f" : "rgba(255,255,255,.95)";
+    ctx.beginPath(); ctx.arc(b.x, b.y, R_BOTAO, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function desenharBola() {
+    // Rastro.
+    bola.rastro.forEach((p, i) => {
+      ctx.fillStyle = `rgba(255,255,255,${(i / bola.rastro.length) * 0.25})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, R_BOLA * (0.4 + 0.6 * i / bola.rastro.length), 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.fillStyle = "rgba(0,0,0,.3)";
+    ctx.beginPath(); ctx.ellipse(bola.x + 3, bola.y + 4, R_BOLA, R_BOLA * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(bola.x - 3, bola.y - 3, 1, bola.x, bola.y, R_BOLA);
+    g.addColorStop(0, "#fff"); g.addColorStop(1, "#d9d9d9");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bola.x, bola.y, R_BOLA, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#222";
+    ctx.beginPath(); ctx.arc(bola.x, bola.y, R_BOLA * 0.38, 0, Math.PI * 2); ctx.fill();
+  }
+
+  function desenhar() {
+    desenharCampo();
+    botoes.forEach(desenharBotao);
+    desenharBola();
+    if (aguardandoInicio || (pausado && !fimDeJogo)) {
+      ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(0, 0, L, A);
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = "bold 54px system-ui, sans-serif";
+      ctx.fillText(aguardandoInicio ? "PRONTOS PARA O JOGO" : "PAUSADO", L / 2, A / 2 - 18);
+      ctx.font = "24px system-ui, sans-serif";
+      ctx.fillText(aguardandoInicio ? "Clique em “Iniciar partida” para começar" : "Clique em “Continuar” para seguir", L / 2, A / 2 + 34);
+    }
+  }
+
+  // ---------- Laço da animação ----------
+  let anterior = performance.now(), t = 0;
+  function quadro(agora) {
+    const dtReal = Math.min(0.05, (agora - anterior) / 1000);
+    anterior = agora;
+    if (!pausado && !fimDeJogo && !aguardandoInicio) {
+      const dt = dtReal * velocidade;
+      t += dtReal;
+      tempoJogo += dtReal;
+      moverBotoes(dtReal, t);
+      if (esperando > 0) {
+        esperando -= dtReal;
+      } else {
+        // Vários passos pequenos por quadro: em alta velocidade a bola não "atravessa" os botões.
+        const passos = Math.max(1, Math.ceil((rapidez() * dt) / (R_BOLA * 0.8)));
+        for (let i = 0; i < passos; i++) {
+          passo(dt / passos);
+          if (esperando > 0) break;
+        }
+        bola.rastro.push({ x: bola.x, y: bola.y });
+        if (bola.rastro.length > 10) bola.rastro.shift();
+      }
+      if (!segundoTempo && tempoJogo >= INTERVALO) intervalo();
+      if (tempoJogo >= PARTIDA) encerrarPartida();
+      mostrarRelogio();
+    }
+    desenhar();
+    requestAnimationFrame(quadro);
+  }
+
+  // ---------- Tempo de jogo ----------
+  // 60 segundos de verdade valem 90 minutos de jogo (cada segundo = 1,5 minuto).
+  function mostrarRelogio() {
+    const minutos = Math.min(tempoJogo, PARTIDA) * (90 / PARTIDA);
+    const mm = Math.floor(minutos), ss = Math.floor((minutos - mm) * 60);
+    const etapa = fimDeJogo ? "Fim de jogo" : segundoTempo ? "2º tempo" : "1º tempo";
+    document.getElementById("relogio").textContent =
+      `${etapa} · ${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+  }
+
+  function intervalo() {
+    segundoTempo = true;
+    trocarLados();
+    mostrarAviso("INTERVALO", "Os times trocam de lado · 2º tempo");
+    novaBola();
+    esperando = 2.2;
+  }
+
+  function encerrarPartida() {
+    fimDeJogo = true;
+    tempoJogo = PARTIDA;
+    mostrarRelogio();
+    const a = { nome: times.azul.nome, gols: placar.azul }, v = { nome: times.vermelho.nome, gols: placar.vermelho };
+    const resultado = a.gols === v.gols
+      ? `Empate: ${escapar(a.nome)} ${a.gols} × ${v.gols} ${escapar(v.nome)}`
+      : `Vitória do ${escapar(a.gols > v.gols ? a.nome : v.nome)}: ${a.gols} × ${v.gols}`;
+    mostrarAviso("FIM DE JOGO", resultado + '<br><span style="font-weight:400">Clique em “Nova partida” para jogar de novo</span>', true);
+    botaoPausar.disabled = true;
+  }
+
+  function novaPartida() {
+    if (ladosTrocados) trocarLados();
+    placar.azul = placar.vermelho = 0; tempoJogo = 0;
+    segundoTempo = false; fimDeJogo = false;
+    document.getElementById("gols-azul").textContent = "0";
+    document.getElementById("gols-vermelho").textContent = "0";
+    const aviso = document.getElementById("aviso-gol");
+    aviso.classList.remove("mostrar", "fixo");
+    botaoPausar.disabled = false;
+    pausado = false; aguardandoInicio = true;
+    botaoPausar.textContent = "Iniciar partida";
+    bola.x = L / 2; bola.y = A / 2; bola.vx = bola.vy = 0; bola.rastro.length = 0;
+    mostrarRelogio();
+  }
+
+  // ---------- Controles ----------
+  const campoVel = document.getElementById("velocidade");
+  const saidaVel = document.getElementById("velocidade-valor");
+  function definirVelocidade(v) {
+    velocidade = Math.min(4, Math.max(0.25, Math.round(v * 4) / 4));
+    campoVel.value = velocidade;
+    saidaVel.textContent = velocidade.toLocaleString("pt-BR") + "×";
+  }
+  campoVel.addEventListener("input", () => definirVelocidade(Number(campoVel.value)));
+  document.getElementById("mais-rapido").addEventListener("click", () => definirVelocidade(velocidade + 0.25));
+  document.getElementById("mais-lento").addEventListener("click", () => definirVelocidade(velocidade - 0.25));
+
+  const botaoPausar = document.getElementById("pausar");
+  function alternarPausa() {
+    if (fimDeJogo) return;
+    if (aguardandoInicio) {
+      aguardandoInicio = false; pausado = false;
+      novaBola();
+    } else {
+      pausado = !pausado;
+    }
+    botaoPausar.textContent = pausado ? "Continuar" : "Pausar";
+  }
+  botaoPausar.addEventListener("click", alternarPausa);
+  document.getElementById("nova-bola").addEventListener("click", () => { if (!aguardandoInicio && !fimDeJogo) novaBola(); });
+  document.getElementById("zerar").addEventListener("click", novaPartida);
+  canvas.addEventListener("click", alternarPausa);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" && e.key !== " ") return;
+    if (e.key === "+" || e.key === "=") definirVelocidade(velocidade + 0.25);
+    else if (e.key === "-" || e.key === "_") definirVelocidade(velocidade - 0.25);
+    else if (e.key === " ") { e.preventDefault(); alternarPausa(); }
+  });
+
+  // Tela nítida em monitores de alta resolução.
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = L * dpr; canvas.height = A * dpr;
+  ctx.scale(dpr, dpr);
+
+  // ---------- Personalizar times ----------
+  function salvarTimes() {
+    const original = ladosTrocados ? { azul: times.vermelho, vermelho: times.azul } : times;
+    try { localStorage.setItem("futebol-de-botao-times", JSON.stringify(original)); }
+    catch (e) { /* escudo muito grande ou sem armazenamento: vale só nesta visita */ }
+  }
+  function carregarEscudo(t) {
+    imagensEscudo[t] = null;
+    if (!times[t].escudo) return;
+    const img = new Image();
+    img.onload = atualizarTela;
+    img.src = times[t].escudo;
+    imagensEscudo[t] = img;
+  }
+  function atualizarTela() {
+    ["azul", "vermelho"].forEach((t) => {
+      document.getElementById("nome-" + t).textContent = times[t].nome || "Sem nome";
+      const esc = document.getElementById("escudo-" + t);
+      esc.style.backgroundImage = times[t].escudo
+        ? `url("${times[t].escudo}")`
+        : `linear-gradient(90deg, ${times[t].cor1} 50%, ${times[t].cor2} 50%)`;
+      if (times[t].estilo === "lisa" && !times[t].escudo) esc.style.backgroundImage = "none";
+      esc.style.backgroundColor = times[t].cor1;
+      const painel = document.querySelector(`.time-config[data-time="${t}"]`);
+      const prev = painel.querySelector(".previa"), pc = prev.getContext("2d");
+      pc.clearRect(0, 0, 120, 120);
+      pintarCamisa(pc, 60, 60, 54, t);
+      pc.lineWidth = 5; pc.strokeStyle = "#fff"; pc.beginPath(); pc.arc(60, 60, 54, 0, Math.PI * 2); pc.stroke();
+      painel.querySelector(".cfg-tirar-escudo").hidden = !times[t].escudo;
+    });
+  }
+  function preencherPainel() {
+    document.querySelectorAll(".time-config").forEach((painel) => {
+      const t = painel.dataset.time, cfg = times[t];
+      painel.querySelector(".cfg-nome").value = cfg.nome;
+      painel.querySelector(".cfg-cor1").value = cfg.cor1;
+      painel.querySelector(".cfg-cor2").value = cfg.cor2;
+      painel.querySelector(".cfg-estilo").value = cfg.estilo;
+    });
+  }
+  document.querySelectorAll(".time-config").forEach((painel) => {
+    const t = painel.dataset.time;
+    const mudar = (campo, chave) => painel.querySelector(campo).addEventListener("input", (e) => {
+      times[t][chave] = chave === "nome" ? e.target.value.slice(0, 24) : e.target.value;
+      salvarTimes(); atualizarTela();
+    });
+    mudar(".cfg-nome", "nome"); mudar(".cfg-cor1", "cor1"); mudar(".cfg-cor2", "cor2");
+    painel.querySelector(".cfg-estilo").addEventListener("change", (e) => { times[t].estilo = e.target.value; salvarTimes(); atualizarTela(); });
+    painel.querySelector(".cfg-escudo").addEventListener("change", (e) => {
+      const arq = e.target.files[0];
+      if (!arq) return;
+      // Reduz a imagem para 160 × 160, assim ela fica leve para guardar no navegador.
+      const leitor = new FileReader();
+      leitor.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const tela = document.createElement("canvas"); tela.width = tela.height = 160;
+          const c = tela.getContext("2d"), esc = Math.max(160 / img.width, 160 / img.height);
+          c.drawImage(img, 80 - (img.width * esc) / 2, 80 - (img.height * esc) / 2, img.width * esc, img.height * esc);
+          times[t].escudo = tela.toDataURL("image/png");
+          carregarEscudo(t); salvarTimes(); atualizarTela();
+        };
+        img.src = leitor.result;
+      };
+      leitor.readAsDataURL(arq);
+      e.target.value = "";
+    });
+    painel.querySelector(".cfg-tirar-escudo").addEventListener("click", () => {
+      times[t].escudo = null; carregarEscudo(t); salvarTimes(); atualizarTela();
+    });
+  });
+  // Troca os times de lado levando junto o placar de cada um.
+  function trocarLados() {
+    const a = times.azul; times.azul = times.vermelho; times.vermelho = a;
+    const g = placar.azul; placar.azul = placar.vermelho; placar.vermelho = g;
+    const i = imagensEscudo.azul; imagensEscudo.azul = imagensEscudo.vermelho; imagensEscudo.vermelho = i;
+    document.getElementById("gols-azul").textContent = placar.azul;
+    document.getElementById("gols-vermelho").textContent = placar.vermelho;
+    ladosTrocados = !ladosTrocados;
+    preencherPainel(); atualizarTela();
+  }
+  document.getElementById("trocar-lados").addEventListener("click", () => { trocarLados(); salvarTimes(); });
+  document.getElementById("restaurar-times").addEventListener("click", () => {
+    Object.assign(times.azul, PADRAO.azul); Object.assign(times.vermelho, PADRAO.vermelho);
+    carregarEscudo("azul"); carregarEscudo("vermelho"); preencherPainel(); salvarTimes(); atualizarTela();
+  });
+  carregarEscudo("azul"); carregarEscudo("vermelho"); preencherPainel(); atualizarTela();
+
+  definirVelocidade(1);
+  mostrarRelogio();
+  requestAnimationFrame(quadro);
+})();
+</script>
+</body>
+</html>
